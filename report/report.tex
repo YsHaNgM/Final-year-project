@@ -1,0 +1,433 @@
+%!TEX program = xelatex
+\documentclass[12pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{textcomp}
+\usepackage{amsmath,amssymb}
+\usepackage{amsthm}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\newcommand{\HRule}{\rule{\linewidth}{0.5mm}}
+\usepackage{float}
+
+
+\usepackage{url}
+
+
+\usepackage{listings}
+\usepackage[framed,numbered,useliterate]{mcode}
+
+\usepackage{parskip}
+\setlength{\parindent}{1em}
+\linespread{1.25}
+
+\newcommand\diff{\,\mathrm{d}}
+\renewcommand{\footnoterule}{\rule{\linewidth}{0pt}}
+\renewcommand{\thefootnote}{\fnsymbol{footnote}}
+%\title{Quantum Cryptography}
+%\author{Shuhao Yang}
+%\date{\today}
+
+
+\begin{document}
+\pagenumbering{Roman}
+\begin{titlepage}
+\input{title.tex}
+\end{titlepage}
+\begin{abstract}	
+This report summarizes the project of study in Quantum Cryptography. Quantum Cryptography is an alternative approach in encryption and it is highly potential in development of future communication. Compared with classical encryption methods, it is highly secure and compatible with other methods. The project explores the implement of communication protocol using quantum cryptography in the aspects of procedures and algorithm, investigates how the different error rate in transmission affect private key rate subsequently. 
+
+We firstly make some clarification of how quantum cryptography is necessary in communication from comparison with classical encryption methods and study the basic properties of quantum theory. This might help understanding the follow up sections which will talk about the techniques used in realistic implement. 
+
+After taking the necessary knowledge, we will then have a close view to BB84 protocol which constructs security communication. We then implement such protocol in MATLAB, and analyse how error rate impacts communication process and valid private key rate.
+\end{abstract}	
+
+\newpage
+\tableofcontents
+
+\newpage
+\pagenumbering{arabic} 
+\section{Introduction}
+In cryptography, it is always the best to take a one-time key on each transmission which called one-time pad as an encryption technique \cite{mitra2004unbreakable}. For every single bit of the message being sent, there is a corresponding mask bit to encrypt it by assigned operation (i.e. Module addition). For the reason that key formed by set of mask bits is one-time use only and the key is generated randomly, it is impossible for an eavesdropper to crack and steel any information premised key pad does not leak.
+
+Here is a simple example to demonstrate encryption by one-time pad where $\ominus$ means module subtraction \cite[p.244]{fox2006quantum}.  
+\begin{align*}
+\begin{tabular}{rc} 
+ & 110111111000001 \\ 
+$\ominus$ & 111011000111001 \\ 
+\hline 
+ & 001100111111000
+\end{tabular}
+\end{align*}
+From the operation shown above, the first line is the message we are going to send in bit, the second line is an encryption key generated in random. It can be seeing as impossible to decipher the original message without knowing the key pad because the probability of guessing the key correct is
+\[
+	p = \frac{1}{2^n}.
+\]
+The more bits in key, the larger number in denominator. This large number represent the number of possible results by simple permutation, although there might be some techniques to reduce such number, but it is still difficult to find only one right result from the huge amount possibilities. In addition, the nightmare key is going to change in next transmission therefore the complexity grows linearly as time goes on. It is the case how the security is achieved.
+\subsection{Symmetric-key cryptography}
+We share the one-time secret key between users to let them restore information, this type of encryption method is called symmetric-key cryptography. Although the security is achieved under the condition that we consume amounts of resources to prepare plenty of secret keys, as well as transmit the key pad ahead communication in safe. Security vanish if any of the conditions fail, even worse, third party may copy key pad or leak it during transmitting, in which case that two users involved in the communication cannot notice it, thus they do not have clear knowledge of whether there is an eavesdropper involve in or not before the irretrievable losses caused. 
+\subsection{Public-key cryptography}
+Comparatively we have asymmetrical cryptography as well, which also known as public cryptography. RSA is the most famous and typical one to be our example, it provides a concise way to construct secret key, prime number multiplication. In RSA, we have paired keys to accomplish encryption and decryption, they are formally called public key $(e,n)$ and private key $(d,n)$, where $n = pq, p,q\in \text{prime}$. Instead of keeping secret key secure all the way through in Symmetric-key cryptography, the RSA key elements $e,n$ are public and encryption key component $e$ different from decryption key component $d$. They are generated by $e\equiv d^{-1} \bmod{\varphi(n)}$, where $\varphi(n)$ denotes Euler totient function which counts the positive integers up to $n$ and relatively prime to $n$, it is computing as:
+\[
+	\varphi(n)=n(1-\frac{1}{p})(1-\frac{1}{q})=(p-1)(q-1),
+\] 
+for the given $n=pq$. In which case we can encrypt plaintext $m$ in such way:
+\[
+	c\equiv m^e\bmod{n},
+\]
+where $c$ is ciphertext. And then we decrypt $m$ to obtain message:
+\[
+	m\equiv c^d \bmod {n}.
+\]
+We need to select two large and distinct prime numbers $p,q$ to fulfil the security of RSA. In the sense of modern computers take very long time to factorize a large known number $n$, consequently $p,q,\varphi(n)$ and private key $(d,n)$ would not reveal to public. Although, the security is based on the assumption that people have limitation on computation speed. Thus, RSA obsolete if there is a way to efficiently factorize prime which will come true as computer science technology improving.
+\section{Background}
+Before we actually touch quantum cryptography, we may get to know some basic quantum information properties first. In the section we will use Dirac notation where $|\psi \rangle$ represents a vector and $\langle\varphi|\psi\rangle$ means inner product between the vectors $|\varphi\rangle$ and $|\psi\rangle$, $|\varphi\rangle\langle \psi|$ represents outer product.
+\subsection{Basic concept}
+\paragraph{Quantum state}
+The quantum stage is the vector in Hilbert space. It can be superposition of unit vectors which is our chosen orthonormal basis. For example we may have such state:
+\[
+	|\psi \rangle =\sum_i c_i|k_i\rangle,
+\]
+where $c_i$ is arbitrary complex number and $|k_i\rangle$ is element of orthonormal basis. We may have a state which is mixture of above quantum state with different probabilities.
+%|\Psi\rangle=p_1|\psi_1\rangle+p_2|\psi_2\rangle+p_3|\psi_3\rangle, 0\leq p\leq1
+We call $|\psi \rangle$ pure state if it can not describe as mixture state and it has unit length, i.e. $\langle \psi|\psi \rangle=1$.
+\paragraph{Qubit}
+
+For representation, we describe information as qubit in quantum mechanics. It is an analogous concept of ‘bit’ in information theory as we used in classical computer \cite[p.13]{nielsen2000quantum}. Formally, a qubit is a linear combination of two-dimensional state system, that means for $i=2$ we have:
+\[
+	|\psi \rangle =\alpha |0\rangle + \beta|1\rangle; \alpha, \beta \in \mathbb{C}, \sqrt{\alpha^2+\beta^2}=1
+\]
+where $|0\rangle=\begin{pmatrix}
+1\\0
+\end{pmatrix}, |1\rangle=
+\begin{pmatrix}
+0\\1
+\end{pmatrix}.$
+\subsection{Quantum measurement}\label{Quantum measurement}
+The measurement of a quantum system requires very precise definition. We use the idea of projective mapping here. In this case the measurement of a qubit system $|\psi\rangle$ gives probability of outcome. The outcomes correspond to the eigenvalues $m$ of observable matrix $M$, which is:
+\[
+	M=\sum_m mP_m.
+\]
+The projective operator $P_m$ is a linear operator that projects $|\psi\rangle$ onto\linebreak eigenspace of $M$ with eigenvalue $m$. Therefore the probability of getting result $m$ is given by \[
+	p(m)=\langle \psi|P_m|\psi\rangle,
+\]
+where $P_m=|k\rangle\langle k|$ in the use of measuring a pure state system $|\psi \rangle =\alpha|k_i\rangle$. In other words, the orthonormal basis $\{|k_i\rangle\}$ spans the eigenspace of $M$. Meanwhile the measurement of pure state system $|\psi \rangle =\alpha|k\rangle$ certainly (100\%) output $m$. Since the inner product of two vector $a$ and $b$ gives:
+\[
+	|\langle a|b\rangle|=|a||b|\cos\theta.
+\]
+Then we have $b=\frac{|a\rangle}{|a|}$, the inner product gives:
+\[
+	|\langle a|b\rangle|=|a|.
+\]
+Therefore the projective measurement $\langle\psi|k\rangle \langle k|\psi\rangle$ would output $|\alpha|^2$ and normally we have $0\leq|\alpha|^2\leq1$ to represent as probability of corresponding outcome. 
+
+For example, provide we have a pure state qubit $|\psi\rangle=
+0|0\rangle + 1|1\rangle,$ measure with an observable, $M=
+\begin{pmatrix}
+1& 0\\0&0
+\end{pmatrix}.$ This has eigenvalues 1 and 0 with corresponding eigenvectors $|0\rangle=\begin{pmatrix}
+1\\0
+\end{pmatrix}$ and $
+|1\rangle=\begin{pmatrix}
+0\\1
+\end{pmatrix}.$ So the measurement gives result 1 with probability $\langle\psi|0\rangle \langle0|\psi\rangle =0,$ and similarly the result 0 with probability $\langle\psi|1\rangle \langle1|\psi\rangle =1$ \cite[p.89]{nielsen2000quantum}. Therefore the measurement $M$ on this qubit outputs 0.
+\subsection{In communication}
+\paragraph{Quantum channel}
+Quantum channel is the communication channel links between users, it can transmit either quantum and classical information. In which case, it can be seen as a pipeline where information sources map though.
+\paragraph{Optical fibre communication}
+The optical fibre communication process normally takes different light pulse level to construct information bit into 0 or 1.
+\paragraph{Collapse}
+Instead of implicitly measuring the system stage in classical mechanics, a measurement makes an incidence on the quantum system. A qubit can be mixture state system which means it is described by superposition of several pure state or superposition of unit components, orthonormal basis $\{|k_i\rangle\}$. In the example on page \pageref{Quantum measurement}, measurement corresponds to the specific $P_m$ is transition from superposition of states to specific state $|k\rangle$ as we only obtain outcome probability on this unit vector. The state of the quantum system immediately after the measurement is \cite[p.88]{nielsen2000quantum}
+\[
+	\frac{P_m|\psi\rangle}{\sqrt{p(m)}}.
+\]
+For $P_m=|k\rangle\langle k|$ the expression above delivers a new state $|\Psi\rangle=|k_i\rangle$. Thus, once we extract the information on a qubit, its original form would annihilate.
+\paragraph{no-cloning theorem}
+no-cloning theorem suggest that it is impossible to make a copy of a unknown qubit \cite[p.25]{nielsen2000quantum}.
+
+\section{Quantum key distribution}
+Theoretically people can communicate over quantum channel directly. In practice, we introduce Quantum key distribution (QKD), the protocol used to share secret key only in communication, to avoid the restriction on bandwidth of quantum channel. The users would combine QKD with a classical crypto method to complete the communication securely. For example, we share a secret key by QKD, and then use this key to perform a classical symmetric-key cryptosystem.
+
+In the implement methods of QKD, there are only qubits being transmitted between two parties of communication. Thus, we need to prepare certain qubit in specific states corresponding to binary values in secret key first, and allow receiver measures the qubit state to restore the original information subsequently. They play as same as encode/decode processes in classical cryptosystem.
+\subsection{Prepare}
+To be able to carry information over qubits and accomplish quantum cryptography, we normally implement in two ways:
+\begin{enumerate} 
+\item Prepare a single photon either base on polarization angle.
+\item Having a pair of entangled photons.
+\end{enumerate}
+We are going to study the polarization angle of photon method in this project for the reason that it is easiest to understand and implement, as well as the project tends to focus on implementation and simulation of QKD protocol. Although the details in the principle of quantum information theory is beyond topic of this project, and the further knowledge about entangled qubits can be found in cited documents in reference \cite{nielsen2000quantum}.
+
+To send a binary bit from key sender, we need to prepare a certain basis first then produce relevant qubit. Conventionally we use two orthonormal bases when prepare and measure the qubits. This is a human defined figure on polarization state of light which use to modulate and filter a photon to certain angle to serve as a qubit system. 
+
+Here we define orthonormal bases $\oplus$ and $\otimes$ in such \cite[p.249]{fox2006quantum}:\\
+\textbf{For basis $\oplus$} we have $\{|0^{\circ}\rangle,|90^{\circ}\rangle\}$ where 
+\[
+	|0^{\circ}\rangle =\begin{pmatrix}
+1\\0
+\end{pmatrix}, 
+|90^{\circ}\rangle=\begin{pmatrix}
+0\\1
+\end{pmatrix},
+\]
+bit value 0 and 1 corresponds to photons with polarization angles of $90^{\circ}$ and $0^{\circ}$ respectively. Therefore in Cartesian form, they are pure state qubits $|\psi\rangle=|90^{\circ}\rangle$ and $|\psi\rangle=|0^{\circ}\rangle$. \\
+\textbf{For basis $\otimes$} we have $\{|45^{\circ}\rangle,|135^{\circ}\rangle\}$ where 
+\[
+	|45^{\circ}\rangle =\begin{pmatrix}
+\frac{1}{\sqrt{2}}\\ \frac{1}{\sqrt{2}}
+\end{pmatrix}, 
+|135^{\circ}\rangle=\begin{pmatrix}
+-\frac{1}{\sqrt{2}}\\\frac{1}{\sqrt{2}}
+\end{pmatrix},
+\]
+bits value 0 and 1 corresponds to photons with polarization angles of $135^{\circ}$ and $45^{\circ}$ respectively. Therefore in Cartesian form, they are pure state qubits $|\psi\rangle=|135^{\circ}\rangle$ and $|\psi\rangle=|45^{\circ}\rangle$.
+
+In abbreviated form we write the four states as $|90^{\circ}\rangle$, $|0^{\circ}\rangle$, $|135^{\circ}\rangle$, $|45^{\circ}\rangle$ and they would be the only representation used in this project. Note it is only for introducing the basic concept of quantum cryptography, instead of using such orthogonal pure states, we normally have mixture state by superposition with different probability in practice.
+
+Thus, the orthonormal polarization bases form the foundation for considering the photon as a qubit. The information in string formed by qubits is then becoming the key on both emitter and receiver.
+\subsection{Measurement} \label{measure}
+
+The receiver catches the qubits then uses the same paired orthonormal basis bases as in creation to measure and decode to bit-value. This decode process is exact reversed of encode under same type of basis. \\
+\textbf{For basis $\oplus$} we use observable matrix 
+$\begin{pmatrix}
+1&0\\ 0&0
+\end{pmatrix}$ in measurement. This has eigenvalues 1 and 0 with corresponding eigenvectors $|0^{\circ}\rangle=\begin{pmatrix}
+1\\0
+\end{pmatrix}$ and $
+|90^{\circ}\rangle=\begin{pmatrix}
+0\\1
+\end{pmatrix}.$ So outcome value certainly corresponds to the eigenvalues 1 while measuring on qubit $|0^\circ\rangle$:
+\[
+	p(1)=\langle 0^\circ|0^\circ\rangle \langle0^\circ|0^\circ\rangle =1,
+\]
+and outcome value certainly corresponds to the eigenvalues 0 while measuring on qubit $|90^\circ\rangle$:
+\[
+	p(0)=\langle 90^\circ|90^\circ\rangle \langle90^\circ|90^\circ\rangle =1.
+\]
+\textbf{For basis $\otimes$} we use observable matrix
+$\begin{pmatrix}
+\frac{1}{2}&\frac{1}{2}\\ \frac{1}{2}&\frac{1}{2}
+\end{pmatrix}$ in measurement. This has eigenvalues 1 and 0 with corresponding eigenvectors $|45^{\circ}\rangle=\begin{pmatrix}
+\frac{1}{\sqrt{2}}\\ \frac{1}{\sqrt{2}}
+\end{pmatrix}$ and $
+|135^{\circ}\rangle=\begin{pmatrix}
+-\frac{1}{\sqrt{2}}\\\frac{1}{\sqrt{2}}
+\end{pmatrix}.$ So outcome value certainly corresponds to the eigenvalues 1 while measuring on qubit $|45^\circ\rangle$:
+\[
+	p(1)=\langle 45^\circ|45^\circ\rangle \langle45^\circ|45^\circ\rangle =1,
+\]
+and outcome value certainly corresponds to the eigenvalues 0 while measuring on qubit $|135^\circ\rangle$:
+\[
+	p(0)=\langle 135^\circ|135^\circ\rangle \langle135^\circ|135^\circ\rangle =1.
+\]
+
+For the same basis used when prepare a qubit, receiver will gain the exact same bit-value. If uses different basis to measure a qubit, a random stage output of qubit would appear (either 0 or 1), which means there is $50\%$ of chance that information does not match the original. Code segment below is from program \mcode{nfilter.m} which use for measurement and decode on receiver side, it shows different behaviours of measurement under first type of basis. If measuring right qubits, i.e. $|90^\circ\rangle$ or $|0^\circ\rangle$, program will output corresponding bit. If measuring $|45^\circ\rangle$ or $|135^\circ\rangle$, program use function \mcode{randi()} to randomly output bit 0 or 1. 
+\begin{lstlisting}
+if base(j) == 1
+%base type in string corrresponds to each qubit, 
+%1 means 0 and 90
+        if mod(qubit(j),90) == 0
+        %if qubit is 0 or 90
+            str(j) = abs(qubit(j)/90 - 1);
+            %output corresponds bit value 0 or 1
+        else
+            str(j) = randi([0,1],1,1);
+        end
+    else
+\end{lstlisting}
+
+All process of measurement cause collapse once we extract information from qubit. The process is irreversible therefore we can not have the qubit with original state if the that original state is unknown to us which also followed by no-cloning theorem. We will talk its usage in section \ref{BB84} on page \pageref{measurepage}. The measurement process is shown on Figure \ref{f1} \cite[p.247]{fox2006quantum} by certain measurement apparatus called polarizing beam splitter (PBS).
+\begin{figure}[H]
+\begin{center}
+\includegraphics[scale=1.5]{33.pdf}
+\end{center}
+\caption{Polarizing beam splitter with two single photon %
+detectors D1 and D2, the incoming photon is linearly %
+polarized with its polarization vector at an angle %
+$\theta$}\label{f1}
+
+\end{figure}
+
+\subsection{Security}
+QKD protocol does not protect against eavesdropping attacks, but it does provide a failsafe way for knowing when the message has been intercepted. \cite[p.246]{fox2006quantum} As we just leant, QKD only transmit qubits in public channel, therefore it exploits the principles of quantum mechanics to enable provably secure distribution of private information. 
+
+Anyone is capable to intercept and extract the information under the same techniques that end users performed. The basic prepare and measurement techniques has been studied over years. Although, the information behind qubit state can reveal to nobody before measurement that cause collapse if do so. 
+
+Meanwhile, an eavesdropper would try to eliminate his existence in communication, therefore he needs to keep communication running as usual while eavesdropping. In this case, he would try to intercept the qubits and resend qubits as original subsequently after obtaining information. However, the probability of extract correct information is 0.5, and eavesdropper could never copy and resend the exact original qubits by no-cloning theorem. In the processing, he intercepts sufficient number of qubits and part of them are incorrect. Therefore, the eavesdropper would always be detected since receiver obtains incorrect information through the mid man \cite[p.593]{nielsen2000quantum}. Thus, QKD is provable secure guaranteed by quantum theory under the condition of fundamental laws of physics being correct.
+
+\section{BB84 protocol}
+\label{BB84}
+BB84 protocol is the most used and analysed quantum key distribution scheme which marks the beginning of QKD \cite[p.159]{fox2006quantum}.  The following steps are taken in the protocol \cite[p.588]{nielsen2000quantum}. 
+\begin{enumerate} 
+\item Alice, as a sender, chooses $(4+\delta)n$ key bits by herself, denoted by $\{X\}$. Then she randomly chooses $(4+\delta)n$ encoding bases $\{m_A:m_A\in\{1,2\}\}$, namely they are methods of using different basis to prepare a qubit in states $x_m, x_m\in\{|0^\circ\rangle,|45^\circ\rangle,|90^\circ\rangle,|135^\circ\rangle\}$.\\
+For $m_A=1$, Alice prepares a qubit from basis $\oplus$ as 
+\[
+	X\in\{0,1\}\rightarrow x_m\in\{|90^\circ\rangle,|0^\circ\rangle\}.
+\]
+For $m_A=2$, Alice prepares a qubit from basis $\otimes$ as
+\[
+	X\in\{0,1\}\rightarrow x_m\in\{|135^\circ\rangle,|45^\circ\rangle\}.
+\]
+She then transmits the set of $(4+\delta)n$ qubits to Bob in an authenticated quantum channel without telling him what bases she used.
+\item On the receiver side, Bob chooses $(4+\delta)n$ bases $m_B$ randomly and independently as well and use it to measure the qubit received, yielding the corresponding result $Y$ which behave reverse of the methods above.\\
+For $m_B=1$, Bob filters the qubit use basis $\oplus$
+\[
+	x_m\rightarrow Y\in\{0,1\}.
+\]
+For $m_B=2$, Bob filters the qubit use basis $\otimes$
+\[
+	x_m\rightarrow Y\in\{0,1\}.
+\] \label{measurepage}
+Bob does not know the basis that Alice has chosen to encode $X$ at this stage. Therefore he is guessing the matching bases from Alice apparently with a $50\%$ chance, either $\oplus$ or $\otimes$.
+\item Bob now communicates with Alice to tell the bases he chose $\{m_B\}$ over a public channel, although he does not reveal the results from measurement.
+\item Alice then identifies which basis they are using coherently on same bit where $m_A=m_B$, and tells Bob which bit they have applied same basis. Both sides discard the other bits and it is highly possible that there are more than $2n$ bits left, in this case they only keep $2n$ sifted bits, otherwise they abort the protocol.
+\item Bob selects n bits of his results to act as check bits and tells Alice. They can be used to measure errors made in transmission as well as detecting Eve \cite[p.26]{van2006quantum}. Alice then checks these bits against her own and perform an error analysis consequently. If error rate is greater than a threshold, they abort the protocol.
+\item Alice and Bob process the remaining n bits by performing error correction to obtain a secret key.
+\end{enumerate}
+ \section{Program and results}
+\subsection{Discussion/achievement}
+\subsubsection{Error rate}
+As we learnt in last section, eavesdropping would cause error on transmission of qubit, additionally some unpredictable error caused by environment or apparatus failure might also be involved. We might treat them as whole and manually insert some errors $E$ in between BB84 protocol step 1 and step 2 of our simulation. 
+
+In the programming, we select such error model that a qubit shift into a random state other than its original to serve as an error bit in transmission \cite{yen2003error}.
+\begin{lstlisting}
+r = randperm(length(qubit_A),er);
+%randomly generate index of number er within number of qubits
+for k = 1:er
+    qubit_B(r(k)) = mod((qubit_A(r(k))+randi([1 3])*45),180);
+    %randomly insert er errors, then Bob receives qubits
+end
+\end{lstlisting}
+Alice and Bob detect eavesdropping in BB84 step 5. They look at error rate in check bits to see whether it is greater than a threshold that cause by environment or apparatus failure estimated from experiment. Although the error rate $e$ in check bits is differ to actual error rate $E$ we inserted. This can be seen from selected program output in Table \ref{err_table}.
+%\\output table
+\begin{table}[H]
+\centering
+\begin{tabular}{c|c|c|c|c|c|c|c|c}
+  \toprule
+   e & 0.0014 & 0.0174 & 0.0328 &0.048&0.0613&0.0757&0.091&0.1097\\\midrule
+  E    & 0.0023 & 0.0253& 0.0483 &0.0712&0.0942&0.1172&0.1402&0.1631\\
+  \bottomrule
+\end{tabular}
+\caption{error rate results}\label{err_table}
+\end{table}
+ This is because an incorrect qubit state does not match its original basis, then the mismatching basis yields 0 or 1 randomly (section \ref{measure}), and it may fortunately output the correct value. For example, a bit valued as $X=1$, is chosen to polarize by $\oplus$ to be gain a qubit state of $x_i=|0^\circ\rangle$ in Alice side and also picked up as an error bit. Therefore, it has equal probability to change to a different state $x_i\in \{|45^\circ\rangle,|90^\circ\rangle,|135^\circ\rangle\}$ as our error model suggested, then decode by Bob outputs $Y\in\{0,1\}$. So we are facing to three fair situations:
+\begin{figure}[H]
+\begin{center}
+\includegraphics[scale=0.25]{tree1.pdf} 
+\\
+\includegraphics[scale=0.25]{tree2.pdf} \\
+\includegraphics[scale=0.25]{tree3.pdf}
+\end{center}
+\caption{Three possibilities for a 0-state qubit, figure shows the probability of different outputs. Dotted portion is going to discard in step 4 since the basis mismatch the original $\oplus$.}
+\end{figure}
+
+As we can see it is possible to restore the correct bit value 1 in output, the probability of yielding a correct bit $Y=1=X$ under the condition of it corresponds to an error bit is:
+\begin{equation}
+\frac{p_{45}+p_{90}+p_{135}}{3} = \frac{0.25+0.5+0.25}{3} = 0.333, \label{q1}
+\end{equation}
+where $p$ denote the probability to output 1 in each situation. So we could generalize it to all states since every error qubit has exact same probability behaviour shown above. The error rate in check bits is given by:
+\[
+	p(Y\neq X|X\text{ is error bit})=1-p(Y= X|X\text{ is error bit}),
+\]
+therefore we may conclude that error rate in check bits $e$ is linearly dependent on overall error rate $E$ with a coefficient 0.667 which matches the outputs in Table \ref{err_table} and Figure \ref{rateplot}.
+
+\subsubsection{Key rate}
+The Matlab function \mcode{protocol.m} simulates BB84 protocol in section \ref{BB84}. It uses $\delta=0.25$ and $n=1024$, so there are $4.25n=4.25*1024=4352$ key bits at beginning. The secret key share between Alice and Bob would be the remaining n bits from step 6 on page \pageref{measurepage} as there is no error correction process involved in the simulation program of BB84 here. The program segment below introduces variable \mcode{match_str} to count the number of valid keys between the remaining n bits on Alice and Bob. Then calculates valid key rate by letting \mcode{match_str} divides original key number, $4.25n$. 
+\begin{lstlisting}
+  % check match key
+    t = rem_bit_A - rem_bit_B;
+    % check same part between remaining n bits on Alice
+    % and Bob, 0 in string t means bit match, 1 otherwise
+    match_str = 0;% counting number of match bits
+    for j = 1:n
+        if t(j) == 0
+            match_str = match_str+1;
+        end
+    end
+    key_rate = match_str/num;  
+    % match bit means a valid key, (number of valid 
+    % key)/(total number 4.25n at begining)
+\end{lstlisting}
+Therefore, theoretically the key rate is
+\[
+	\frac{n}{4.25n}=0.235,
+\]
+if there is no error.
+In the output part of program, we insert error bits to protocol with number from $0$ to 870 and invoke the protocol 200 times correspond to each error value. The function \mcode{protocol} inputs error number, outputs error number in check bits $e$ and key rate, store the data in two matrices \mcode{error_e} and \mcode{rate}. 
+\begin{lstlisting}
+n = 1024; rounds = 200;
+error = 0:10:870; % number of error insert
+rate = zeros(rounds,length(error)); %key rate
+error_e = zeros(rounds,length(error));
+% error rate in check bits
+for i=1:rounds
+    for j = 1:length(error)
+        [error_e(i,j),rate(i,j)] = protocol( error(j) );
+        %input error number, output error number in 
+        %check bits and key rate
+    end
+end
+\end{lstlisting}
+We then evaluate the mean values for both of error rate in check bits $e$ and key rate to reduce the abnormalities affect by random number algorithm in Matlab.
+\begin{lstlisting}
+for j = 1:length(error)
+  avgrate(j)=sum(rate(:,j))/rounds; %average key rate
+end
+for j = 1:length(error)
+  avg_error_rate1(j)=sum(error_rate1(:,j))/rounds; 
+  % average error rate in check bits
+end
+\end{lstlisting}
+From the output in Figure \ref{rateplot}, we see the key rate drops down as we increase the overall error rate $E$ from 0 to 0.2, as well as increase error rate in check bits $e$ since we know $e$ is relative with $E$. 
+\begin{figure}[H]
+\centering
+\includegraphics[scale=0.65]{rate.pdf}
+\caption{Relation of key rate and error rate in check bits $e$ against overall error rate $E$}\label{rateplot}
+\end{figure}
+
+\subsection{Eavesdrop}
+Then let us compare the scenario of insecure. When there is an eavesdropper involved, for example, we assume that eavesdropper Eve holds all similar apparatus as Alice and Bob. She can receive, send and encode in exact way like original users. 
+\begin{figure}[H]
+\begin{center}
+\includegraphics[scale=1.23]{1111112copy.pdf}
+\end{center}
+\caption{Eve intercepts the process of transmitting, detects qubits from Alice then recode and send to Bob with her knowledge \cite[p.252]{fox2006quantum}.}
+\end{figure}
+In this process, Eve replaces Bob's original position, receives qubits from Alice and guesses the bases on her own to gain half of them right as Bob originally was, that means, she has the right knowledge of bits as well as polarity. Eve may recode using same bases and send these qubits to Bob without anyone notice. For the remaining half of the bits, she guesses incorrectly. She then sends Bob the qubits encoded by her choice of bases, rather than Alice's. In this case, Bob will gain random results with a probability of $50\%$. Thus, he will detect error even he guessed Alice's basis correctly.
+\begin{equation}
+\begin{aligned}
+	p(error)&=p(\text{Eve has wrong basis})\times p(\text{Bob has wrong result})\\
+&=50\%\times 50\%\\
+&=25\%
+\end{aligned}
+\end{equation}
+
+\subsection{Recommendation}
+For the limitation on length of the project, there are some aspect can be improved. In this project I only implement the part of BB84 protocol but not error correction process. For a complete secure BB84, there are always the processes Reconciliation and Private amplification involved. So I would research them and finish the secure BB84 protocol in the future study. In addition, the error model I chose is a simplified and limit model, it can be extended and generalized.
+\subsubsection{Reconciliation}
+Reconciliation is the technique used to restore the missing bits on Bob which ensure his key string exactly matches Alice's. In one aspect it is error correction process run over public channel. So it is possible to achieve using classical method such as cascade, turbo or low-density parity-check (LDPC) code.
+
+I have done some study throughout classical error correction method to be able to learn the concept of advance LDPC coding. The very beginning family is Hamming code which is widely using in computer memory error correction. It is a linear error-correcting code that groups data bits and inserts parity bits which valued by number of 1 in data group into the bit string to form a new string to be transmitted \cite[p.2]{error2004det}. Subsequently, the corresponding Hamming decode process could detect error bit in the string and correct it.
+
+In addition, I implemented Hamming(7,4) method as the result of my study and understanding in Hamming code (hamming\underline{~}G.m and hamming\underline{~}H.m in appendix). Although Hamming(7,4) is not suitable to use for reconciliation in BB84 protocol within this project, mainly there are two problems:
+
+\begin{enumerate}
+\item It only operates on binary string. Refer to section \ref{BB84} we can only apply encode process in step 1 and produce $(4+\delta)n$ bits. Then apply decode process in step 6 after sifting bits. However Hamming code requires consistency on bit index, which means if there is a parity bit on second position of string outputted from encoding, there should be the parity bit on second position of the string to input in decoding as well. Sifting process break the consistence as there are only n bits left in string compare with $(4+\delta)n$ bits. Nevertheless, the necessity of sifting is from quantum measurement, which leads to another problem.
+\item Error produced in procedure of quantum measurement is out of correction ability of Hamming(7,4). Hamming(7,4) encodes four bits of data into seven bits by adding three parity bits. Meanwhile it can only correct one bit of error in its block of 7 bits \cite[p.4]{error2004det}. However the Protocol produces at most 0.235 valid bits in result on \pageref{rateplot}. Therefore rest of bits in the string
+are invalid and treated as error bits. From obvious comparison
+\[
+	1-0.235=0.765\geq 0.143 = \frac{1}{7},
+\]
+Hamming(7,4) is not able to correct the error from BB84 protocol in section \ref{BB84}.
+\end{enumerate}
+From studying Hamming code, I learnt historical development of error correction method. LDPC is a type of advanced linear error correcting code. Because of its outstanding preformance, it is very popular to use in future telecom, people also trying to find its potential in use of reconciliation. Due to time restrain, I could not complete the study of LDPC and accomplish reconciliation for BB84 protocol. This would my future study plan and successive project goal.
+\subsubsection{Private amplification}
+Private amplification applies data compression technique to reduce Eve's partial information. Alice and Bob extract a new key string from their old key string in section \ref{BB84} after Bob preforming reconciliation. We might use hush function to achieve this process \cite[p.88]{van2006quantum} at the end of BB84 protocol. 
+\subsubsection{Error model}
+The error model I used is discrete, but error is continuous and dynamic change on a qubit system in realistic. Moreover the error does not only occur on shift polarization angle, it might generalize to other basic form such as bit flip, and then combine to a more realistic model.
+\appendix
+%\include{background}
+\include{code}
+
+\bibliographystyle{plain}
+\bibliography{ref}
+\end{document}
